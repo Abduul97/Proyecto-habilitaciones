@@ -61,6 +61,16 @@ export function getEventos(filters = {}) {
   if (filters.fecha) {
     result = result.filter(e => e.fecha && e.fecha.includes(filters.fecha));
   }
+  if (filters.pagado !== undefined) {
+    const pagado = filters.pagado === 'true' || filters.pagado === true;
+    result = result.filter(e => e.pagado === pagado);
+  }
+  if (filters.desde) {
+    result = result.filter(e => e.fecha && e.fecha >= filters.desde);
+  }
+  if (filters.hasta) {
+    result = result.filter(e => e.fecha && e.fecha <= filters.hasta);
+  }
   
   return result;
 }
@@ -79,6 +89,8 @@ export function createEvento(data) {
     evento: data.evento || '',
     hora: data.hora || '',
     comprobante: data.comprobante || '',
+    comprobantePDF: data.comprobantePDF || null,
+    pagado: data.pagado || false,
     periodo: 'manual',
     createdAt: new Date().toISOString()
   };

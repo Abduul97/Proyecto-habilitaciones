@@ -10,6 +10,7 @@ import eventosRoutes from './routes/eventos.js';
 import rubrosRoutes from './routes/rubros.js';
 import habilitadosRoutes from './routes/habilitados.js';
 import chatRoutes from './routes/chat.js';
+import reportesRoutes from './routes/reportes.js';
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ app.use('/api/eventos', eventosRoutes);
 app.use('/api/rubros', rubrosRoutes);
 app.use('/api/habilitados', habilitadosRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/reportes', reportesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
