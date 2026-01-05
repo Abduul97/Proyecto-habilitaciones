@@ -41,6 +41,20 @@ export const api = {
   updateEventoWithFile: (id, formData) => requestFormData(`/eventos/${id}`, 'PUT', formData),
   deleteEvento: (id) => request(`/eventos/${id}`, { method: 'DELETE' }),
   
+  // Locales
+  getLocales: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/locales${query ? `?${query}` : ''}`);
+  },
+  getLocal: (id) => request(`/locales/${id}`),
+  createLocal: (data) => request('/locales', { method: 'POST', body: JSON.stringify(data) }),
+  updateLocal: (id, data) => request(`/locales/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteLocal: (id) => request(`/locales/${id}`, { method: 'DELETE' }),
+  
+  // Tipos de Evento
+  getTiposEvento: () => request('/locales/tipos-evento'),
+  addTipoEvento: (tipo) => request('/locales/tipos-evento', { method: 'POST', body: JSON.stringify({ tipo }) }),
+  
   // Rubros
   getRubros: (params = {}) => {
     const query = new URLSearchParams(params).toString();

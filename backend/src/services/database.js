@@ -11,6 +11,8 @@ let db = {
   rubros: [],
   requisitos: {},
   habilitados: [],
+  locales: [],
+  tiposEvento: ['Apertura', 'Karaoke', 'Cumpleaños', 'Fiesta privada', 'Evento en vivo', 'Show musical', 'DJ', 'Aniversario', 'Despedida', 'Otro'],
   initialized: false,
   lastModified: null
 };
@@ -36,6 +38,11 @@ function saveDB() {
 export function initDatabase() {
   if (loadDB() && db.initialized) {
     console.log('Database loaded from file');
+    // Asegurar que tiposEvento exista
+    if (!db.tiposEvento) {
+      db.tiposEvento = ['Apertura', 'Karaoke', 'Cumpleaños', 'Fiesta privada', 'Evento en vivo', 'Show musical', 'DJ', 'Aniversario', 'Despedida', 'Otro'];
+      saveDB();
+    }
     return;
   }
   
@@ -46,9 +53,31 @@ export function initDatabase() {
   db.rubros = rubrosData.rubros;
   db.requisitos = rubrosData.requisitos;
   db.habilitados = parseHabilitados();
+  
+  // Extraer locales únicos de eventos
+  const localesMap = new Map();
+  db.eventos.forEach(e => {
+    const key = e.local.toUpperCase().trim();
+    if (!localesMap.has(key)) {
+      localesMap.set(key, {
+        id: `local-${localesMap.size + 1}`,
+        nombre: e.local.trim(),
+        domicilio: e.domicilio || '',
+        createdAt: new Date().toISOString()
+      });
+    }
+  });
+  db.locales = Array.from(localesMap.values());
+  
+  // Asociar eventos a locales
+  db.eventos = db.eventos.map(e => ({
+    ...e,
+    localId: db.locales.find(l => l.nombre.toUpperCase().trim() === e.local.toUpperCase().trim())?.id || null
+  }));
+  
   db.initialized = true;
   saveDB();
-  console.log(`Database initialized: ${db.eventos.length} eventos, ${db.rubros.length} rubros, ${db.habilitados.length} habilitados`);
+  console.log(`Database initialized: ${db.eventos.length} eventos, ${db.locales.length} locales, ${db.rubros.length} rubros, ${db.habilitados.length} habilitados`);
 }
 
 // ============ EVENTOS ============
@@ -336,4 +365,75 @@ function calcularEstadoGeneral(hab) {
 // Export db for direct access if needed
 export function getDB() {
   return db;
+}
+
+// ============ LOCALES ============
+export function getLocales(filters = {}) {
+  let result = [...(db.locales || [])];
+  
+  if (filters.q) {
+    const search = filters.q.toLowerCase();
+    result = result.filter(l => 
+      l.nombre.toLowerCase().includes(search) ||
+      l.domicilio.toLowerCase().includes(search)
+    );
+  }
+  
+  return result;
+}
+
+export function getLocalById(id) {
+  return db.locales?.find(l => l.id === id);
+}
+
+export function createLocal(data) {
+  const id = `local-${Date.now()}`;
+  const local = {
+    id,
+    nombre: data.nombre,
+    domicilio: data.domicilio || '',
+    createdAt: new Date().toISOString()
+  };
+  
+  if (!db.locales) db.locales = [];
+  db.locales.unshift(local);
+  saveDB();
+  return local;
+}
+
+export function updateLocal(id, data) {
+  const idx = db.locales?.findIndex(l => l.id === id);
+  if (idx === -1 || idx === undefined) return null;
+  
+  db.locales[idx] = { ...db.locales[idx], ...data, updatedAt: new Date().toISOString() };
+  saveDB();
+  return db.locales[idx];
+}
+
+export function deleteLocal(id) {
+  const idx = db.locales?.findIndex(l => l.id === id);
+  if (idx === -1 || idx === undefined) return false;
+  
+  db.locales.splice(idx, 1);
+  saveDB();
+  return true;
+}
+
+// ============ TIPOS DE EVENTO ============
+export function getTiposEvento() {
+  return db.tiposEvento || [];
+}
+
+export function addTipoEvento(tipo) {
+  if (!db.tiposEvento) db.tiposEvento = [];
+  if (!db.tiposEvento.includes(tipo)) {
+    db.tiposEvento.push(tipo);
+    saveDB();
+  }
+  return db.tiposEvento;
+}
+
+// ============ EVENTOS POR LOCAL ============
+export function getEventosByLocal(localId) {
+  return db.eventos.filter(e => e.localId === localId);
 }

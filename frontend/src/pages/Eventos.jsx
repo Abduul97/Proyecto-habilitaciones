@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { api } from '../services/api'
 
 const emptyForm = {
-  local: '',
+  localId: '',
+  localNombre: '',
   domicilio: '',
   evento: '',
   fecha: '',
@@ -13,6 +14,8 @@ const emptyForm = {
 
 export default function Eventos() {
   const [eventos, setEventos] = useState([])
+  const [locales, setLocales] = useState([])
+  const [tiposEvento, setTiposEvento] = useState([])
   const [search, setSearch] = useState('')
   const [filtroPagado, setFiltroPagado] = useState('')
   const [filtroDesde, setFiltroDesde] = useState('')
@@ -20,30 +23,39 @@ export default function Eventos() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [showForm, setShowForm] = useState(false)
+  const [showLocalForm, setShowLocalForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  const [nuevoLocal, setNuevoLocal] = useState({ nombre: '', domicilio: '' })
+  const [nuevoTipo, setNuevoTipo] = useState('')
   const [pdfFile, setPdfFile] = useState(null)
   const [mensaje, setMensaje] = useState(null)
 
   useEffect(() => {
-    loadEventos()
+    loadData()
   }, [filtroPagado, filtroDesde, filtroHasta])
 
-  async function loadEventos(local = '') {
+  async function loadData() {
     setLoading(true)
     try {
       const params = {}
-      if (local) params.local = local
       if (filtroPagado !== '') params.pagado = filtroPagado
       if (filtroDesde) params.desde = filtroDesde
       if (filtroHasta) params.hasta = filtroHasta
       
-      const data = await api.getEventos(params)
-      setEventos(data.data || [])
-      setTotal(data.total || 0)
+      const [eventosData, localesData, tiposData] = await Promise.all([
+        api.getEventos(params),
+        api.getLocales(),
+        api.getTiposEvento()
+      ])
+      
+      setEventos(eventosData.data || [])
+      setTotal(eventosData.total || 0)
+      setLocales(localesData.data || [])
+      setTiposEvento(tiposData.data || [])
     } catch (error) {
       console.error('Error:', error)
-      showMensaje('Error al cargar eventos', 'error')
+      showMensaje('Error al cargar datos', 'error')
     } finally {
       setLoading(false)
     }
@@ -56,7 +68,16 @@ export default function Eventos() {
 
   async function handleSearch(e) {
     e.preventDefault()
-    loadEventos(search)
+    setLoading(true)
+    try {
+      const data = await api.getEventos({ local: search })
+      setEventos(data.data || [])
+      setTotal(data.total || 0)
+    } catch (error) {
+      showMensaje('Error en búsqueda', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   function openNewForm() {
@@ -68,7 +89,8 @@ export default function Eventos() {
 
   function openEditForm(evento) {
     setForm({
-      local: evento.local || '',
+      localId: evento.localId || '',
+      localNombre: evento.local || '',
       domicilio: evento.domicilio || '',
       evento: evento.evento || '',
       fecha: evento.fecha || '',
@@ -81,13 +103,63 @@ export default function Eventos() {
     setShowForm(true)
   }
 
+  function handleLocalSelect(localId) {
+    const local = locales.find(l => l.id === localId)
+    if (local) {
+      setForm({ 
+        ...form, 
+        localId: local.id,
+        localNombre: local.nombre,
+        domicilio: local.domicilio 
+      })
+    }
+  }
+
+  async function handleCreateLocal(e) {
+    e.preventDefault()
+    try {
+      const response = await api.createLocal(nuevoLocal)
+      setLocales([response.data, ...locales])
+      setForm({
+        ...form,
+        localId: response.data.id,
+        localNombre: response.data.nombre,
+        domicilio: response.data.domicilio
+      })
+      setNuevoLocal({ nombre: '', domicilio: '' })
+      setShowLocalForm(false)
+      showMensaje('Local creado')
+    } catch (error) {
+      showMensaje(error.message, 'error')
+    }
+  }
+
+  async function handleAddTipo() {
+    if (!nuevoTipo.trim()) return
+    try {
+      const response = await api.addTipoEvento(nuevoTipo.trim())
+      setTiposEvento(response.data)
+      setForm({ ...form, evento: nuevoTipo.trim() })
+      setNuevoTipo('')
+      showMensaje('Tipo agregado')
+    } catch (error) {
+      showMensaje(error.message, 'error')
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     try {
       const formData = new FormData()
-      Object.keys(form).forEach(key => {
-        formData.append(key, form[key])
-      })
+      formData.append('local', form.localNombre)
+      formData.append('localId', form.localId)
+      formData.append('domicilio', form.domicilio)
+      formData.append('evento', form.evento)
+      formData.append('fecha', form.fecha)
+      formData.append('hora', form.hora)
+      formData.append('comprobante', form.comprobante)
+      formData.append('pagado', form.pagado)
+      
       if (pdfFile) {
         formData.append('comprobantePDF', pdfFile)
       }
@@ -103,7 +175,7 @@ export default function Eventos() {
       setForm(emptyForm)
       setPdfFile(null)
       setEditingId(null)
-      loadEventos()
+      loadData()
     } catch (error) {
       showMensaje(error.message, 'error')
     }
@@ -114,7 +186,7 @@ export default function Eventos() {
     try {
       await api.deleteEvento(id)
       showMensaje('Evento eliminado')
-      loadEventos()
+      loadData()
     } catch (error) {
       showMensaje(error.message, 'error')
     }
@@ -163,7 +235,7 @@ export default function Eventos() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h1 className="page-title">Eventos Autorizados</h1>
-            <p className="page-subtitle">Registro de eventos ({total} total)</p>
+            <p className="page-subtitle">{total} eventos | {locales.length} locales</p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button className="btn btn-secondary" onClick={exportarPDF}>📄 PDF</button>
@@ -196,7 +268,7 @@ export default function Eventos() {
           <button className="btn btn-secondary btn-sm" onClick={() => setFiltroRapido('semana')}>Esta semana</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setFiltroRapido('mes')}>Este mes</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setFiltroRapido('año')}>Este año</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setFiltroDesde(''); setFiltroHasta(''); setFiltroPagado(''); }}>Limpiar</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setFiltroDesde(''); setFiltroHasta(''); setFiltroPagado(''); loadData(); }}>Limpiar</button>
         </div>
         
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -214,7 +286,6 @@ export default function Eventos() {
             type="date" 
             className="search-input"
             style={{ flex: 1, minWidth: '150px' }}
-            placeholder="Desde"
             value={filtroDesde}
             onChange={(e) => setFiltroDesde(e.target.value)}
           />
@@ -222,7 +293,6 @@ export default function Eventos() {
             type="date" 
             className="search-input"
             style={{ flex: 1, minWidth: '150px' }}
-            placeholder="Hasta"
             value={filtroHasta}
             onChange={(e) => setFiltroHasta(e.target.value)}
           />
@@ -238,32 +308,55 @@ export default function Eventos() {
               <button className="btn-close" onClick={() => setShowForm(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label>Local *</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <select
+                    className="search-input"
+                    style={{ flex: 1 }}
+                    value={form.localId}
+                    onChange={(e) => handleLocalSelect(e.target.value)}
+                    required
+                  >
+                    <option value="">Seleccionar local...</option>
+                    {locales.map(l => (
+                      <option key={l.id} value={l.id}>{l.nombre}</option>
+                    ))}
+                  </select>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowLocalForm(true)}>
+                    + Nuevo
+                  </button>
+                </div>
+                {form.domicilio && <small style={{ color: 'var(--text-muted)' }}>📍 {form.domicilio}</small>}
+              </div>
+
               <div className="form-grid">
                 <div className="form-group">
-                  <label>Local *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.local}
-                    onChange={(e) => setForm({ ...form, local: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Domicilio</label>
-                  <input
-                    type="text"
-                    value={form.domicilio}
-                    onChange={(e) => setForm({ ...form, domicilio: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Evento</label>
-                  <input
-                    type="text"
-                    value={form.evento}
-                    placeholder="Ej: Apertura, Fiesta, Karaoke"
-                    onChange={(e) => setForm({ ...form, evento: e.target.value })}
-                  />
+                  <label>Tipo de Evento *</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <select
+                      className="search-input"
+                      style={{ flex: 1 }}
+                      value={form.evento}
+                      onChange={(e) => setForm({ ...form, evento: e.target.value })}
+                      required
+                    >
+                      <option value="">Seleccionar tipo...</option>
+                      {tiposEvento.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder="Agregar nuevo tipo..."
+                      value={nuevoTipo}
+                      onChange={(e) => setNuevoTipo(e.target.value)}
+                      style={{ flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
+                    />
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddTipo}>+</button>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Fecha</label>
@@ -294,17 +387,17 @@ export default function Eventos() {
               
               <div className="form-grid" style={{ marginTop: '1rem' }}>
                 <div className="form-group">
-                  <label>Comprobante PDF</label>
+                  <label>Comprobante (PDF o Imagen)</label>
                   <input
                     type="file"
-                    accept=".pdf"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
                     onChange={(e) => setPdfFile(e.target.files[0])}
                   />
-                  {pdfFile && <small>Archivo: {pdfFile.name}</small>}
+                  {pdfFile && <small>📎 {pdfFile.name}</small>}
                 </div>
                 <div className="form-group">
                   <label>Estado de pago</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
                     <input
                       type="checkbox"
                       checked={form.pagado}
@@ -328,6 +421,43 @@ export default function Eventos() {
         </div>
       )}
 
+      {/* Modal Nuevo Local */}
+      {showLocalForm && (
+        <div className="modal-overlay" style={{ zIndex: 1001 }}>
+          <div className="modal" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3>Nuevo Local</h3>
+              <button className="btn-close" onClick={() => setShowLocalForm(false)}>×</button>
+            </div>
+            <form onSubmit={handleCreateLocal}>
+              <div className="form-group">
+                <label>Nombre *</label>
+                <input
+                  type="text"
+                  required
+                  value={nuevoLocal.nombre}
+                  onChange={(e) => setNuevoLocal({ ...nuevoLocal, nombre: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Domicilio</label>
+                <input
+                  type="text"
+                  value={nuevoLocal.domicilio}
+                  onChange={(e) => setNuevoLocal({ ...nuevoLocal, domicilio: e.target.value })}
+                />
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowLocalForm(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary">Crear</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         {loading ? (
           <div className="loading">Cargando...</div>
@@ -339,10 +469,10 @@ export default function Eventos() {
               <tr>
                 <th>Fecha</th>
                 <th>Local</th>
-                <th>Evento</th>
+                <th>Tipo</th>
                 <th>Hora</th>
                 <th>Pagado</th>
-                <th>PDF</th>
+                <th>Comp.</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -361,7 +491,7 @@ export default function Eventos() {
                   <td>
                     {evento.comprobantePDF ? (
                       <a href={`/api/eventos/comprobante/${evento.comprobantePDF}`} target="_blank" rel="noopener noreferrer">
-                        📄 Ver
+                        📎
                       </a>
                     ) : '-'}
                   </td>
