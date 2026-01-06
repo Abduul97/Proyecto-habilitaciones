@@ -91,39 +91,52 @@ router.get('/:id', (req, res) => {
   }
 });
 
-router.post('/', upload.single('comprobantePDF'), (req, res) => {
+// Crear eventos (soporta múltiples eventos + múltiples comprobantes)
+router.post('/', upload.array('comprobantes', 10), (req, res) => {
   try {
-    const { local, domicilio, evento, fecha, hora, comprobante, pagado } = req.body;
+    const { local, localId, domicilio, pagado, eventos: eventosJson } = req.body;
     
     if (!local) {
       return res.status(400).json({ error: 'Local es requerido' });
     }
     
-    const nuevoEvento = createEvento({
+    // Parsear eventos si viene como JSON string
+    let eventosData = [];
+    if (eventosJson) {
+      try {
+        eventosData = JSON.parse(eventosJson);
+      } catch (e) {
+        return res.status(400).json({ error: 'Formato de eventos inválido' });
+      }
+    }
+    
+    // Obtener nombres de archivos subidos
+    const comprobantes = req.files ? req.files.map(f => f.filename) : [];
+    
+    const nuevosEventos = createEvento({
       local,
+      localId,
       domicilio,
-      evento,
-      fecha,
-      hora,
-      comprobante,
       pagado: pagado === 'true' || pagado === true,
-      comprobantePDF: req.file ? req.file.filename : null
+      eventos: eventosData,
+      comprobantes
     });
-    res.status(201).json({ data: nuevoEvento, mensaje: 'Evento creado' });
+    
+    res.status(201).json({ data: nuevosEventos, mensaje: `${nuevosEventos.length} evento(s) creado(s)` });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al crear evento' });
   }
 });
 
-router.put('/:id', upload.single('comprobantePDF'), (req, res) => {
+router.put('/:id', upload.array('comprobantes', 10), (req, res) => {
   try {
     const updateData = { ...req.body };
     if (req.body.pagado !== undefined) {
       updateData.pagado = req.body.pagado === 'true' || req.body.pagado === true;
     }
-    if (req.file) {
-      updateData.comprobantePDF = req.file.filename;
+    if (req.files && req.files.length > 0) {
+      updateData.comprobantes = req.files.map(f => f.filename);
     }
     
     const evento = updateEvento(req.params.id, updateData);

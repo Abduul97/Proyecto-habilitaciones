@@ -109,23 +109,53 @@ export function getEventoById(id) {
 }
 
 export function createEvento(data) {
-  const id = `manual-${Date.now()}`;
-  const evento = {
-    id,
-    fecha: data.fecha || null,
-    local: data.local,
-    domicilio: data.domicilio || '',
-    evento: data.evento || '',
-    hora: data.hora || '',
-    comprobante: data.comprobante || '',
-    comprobantePDF: data.comprobantePDF || null,
-    pagado: data.pagado || false,
-    periodo: 'manual',
-    createdAt: new Date().toISOString()
-  };
-  db.eventos.unshift(evento);
+  const registroId = `reg-${Date.now()}`;
+  const eventos = [];
+  
+  // Si viene con múltiples eventos (nuevo formato)
+  if (data.eventos && Array.isArray(data.eventos)) {
+    data.eventos.forEach((ev, idx) => {
+      eventos.push({
+        id: `${registroId}-${idx}`,
+        registroId,
+        localId: data.localId || null,
+        local: data.local,
+        domicilio: data.domicilio || '',
+        evento: ev.tipo,
+        fecha: ev.fecha || null,
+        horaDesde: ev.horaDesde || '',
+        horaHasta: ev.horaHasta || '',
+        hora: ev.horaDesde && ev.horaHasta ? `${ev.horaDesde} a ${ev.horaHasta}` : ev.horaDesde || '',
+        comprobantes: data.comprobantes || [],
+        pagado: data.pagado || false,
+        periodo: 'manual',
+        createdAt: new Date().toISOString()
+      });
+    });
+  } else {
+    // Formato antiguo (compatibilidad)
+    eventos.push({
+      id: `manual-${Date.now()}`,
+      registroId,
+      localId: data.localId || null,
+      local: data.local,
+      domicilio: data.domicilio || '',
+      evento: data.evento || '',
+      fecha: data.fecha || null,
+      horaDesde: data.horaDesde || '',
+      horaHasta: data.horaHasta || '',
+      hora: data.hora || '',
+      comprobantePDF: data.comprobantePDF || null,
+      comprobantes: data.comprobantes || [],
+      pagado: data.pagado || false,
+      periodo: 'manual',
+      createdAt: new Date().toISOString()
+    });
+  }
+  
+  db.eventos.unshift(...eventos);
   saveDB();
-  return evento;
+  return eventos;
 }
 
 export function updateEvento(id, data) {

@@ -1,16 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../services/api'
 
-const emptyForm = {
-  localId: '',
-  localNombre: '',
-  domicilio: '',
-  evento: '',
-  fecha: '',
-  hora: '',
-  comprobante: '',
-  pagado: false
-}
+const emptyEvento = { tipo: '', fecha: '', horaDesde: '', horaHasta: '' }
 
 export default function Eventos() {
   const [eventos, setEventos] = useState([])
@@ -24,11 +15,15 @@ export default function Eventos() {
   const [total, setTotal] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const [showLocalForm, setShowLocalForm] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [form, setForm] = useState(emptyForm)
+  
+  // Form state
+  const [selectedLocalId, setSelectedLocalId] = useState('')
+  const [selectedLocal, setSelectedLocal] = useState(null)
+  const [eventosForm, setEventosForm] = useState([{ ...emptyEvento }])
+  const [comprobantes, setComprobantes] = useState([])
+  const [pagado, setPagado] = useState(false)
   const [nuevoLocal, setNuevoLocal] = useState({ nombre: '', domicilio: '' })
   const [nuevoTipo, setNuevoTipo] = useState('')
-  const [pdfFile, setPdfFile] = useState(null)
   const [mensaje, setMensaje] = useState(null)
 
   useEffect(() => {
@@ -81,38 +76,43 @@ export default function Eventos() {
   }
 
   function openNewForm() {
-    setForm({ ...emptyForm, fecha: new Date().toISOString().split('T')[0] })
-    setPdfFile(null)
-    setEditingId(null)
-    setShowForm(true)
-  }
-
-  function openEditForm(evento) {
-    setForm({
-      localId: evento.localId || '',
-      localNombre: evento.local || '',
-      domicilio: evento.domicilio || '',
-      evento: evento.evento || '',
-      fecha: evento.fecha || '',
-      hora: evento.hora || '',
-      comprobante: evento.comprobante || '',
-      pagado: evento.pagado || false
-    })
-    setPdfFile(null)
-    setEditingId(evento.id)
+    setSelectedLocalId('')
+    setSelectedLocal(null)
+    setEventosForm([{ ...emptyEvento }])
+    setComprobantes([])
+    setPagado(false)
     setShowForm(true)
   }
 
   function handleLocalSelect(localId) {
     const local = locales.find(l => l.id === localId)
-    if (local) {
-      setForm({ 
-        ...form, 
-        localId: local.id,
-        localNombre: local.nombre,
-        domicilio: local.domicilio 
-      })
+    setSelectedLocalId(localId)
+    setSelectedLocal(local)
+  }
+
+  function addEvento() {
+    setEventosForm([...eventosForm, { ...emptyEvento }])
+  }
+
+  function removeEvento(index) {
+    if (eventosForm.length > 1) {
+      setEventosForm(eventosForm.filter((_, i) => i !== index))
     }
+  }
+
+  function updateEvento(index, field, value) {
+    const updated = [...eventosForm]
+    updated[index] = { ...updated[index], [field]: value }
+    setEventosForm(updated)
+  }
+
+  function handleFileChange(e) {
+    const files = Array.from(e.target.files)
+    setComprobantes([...comprobantes, ...files])
+  }
+
+  function removeComprobante(index) {
+    setComprobantes(comprobantes.filter((_, i) => i !== index))
   }
 
   async function handleCreateLocal(e) {
@@ -120,12 +120,8 @@ export default function Eventos() {
     try {
       const response = await api.createLocal(nuevoLocal)
       setLocales([response.data, ...locales])
-      setForm({
-        ...form,
-        localId: response.data.id,
-        localNombre: response.data.nombre,
-        domicilio: response.data.domicilio
-      })
+      setSelectedLocalId(response.data.id)
+      setSelectedLocal(response.data)
       setNuevoLocal({ nombre: '', domicilio: '' })
       setShowLocalForm(false)
       showMensaje('Local creado')
@@ -139,7 +135,6 @@ export default function Eventos() {
     try {
       const response = await api.addTipoEvento(nuevoTipo.trim())
       setTiposEvento(response.data)
-      setForm({ ...form, evento: nuevoTipo.trim() })
       setNuevoTipo('')
       showMensaje('Tipo agregado')
     } catch (error) {
@@ -149,32 +144,33 @@ export default function Eventos() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    
+    if (!selectedLocal) {
+      showMensaje('Selecciona un local', 'error')
+      return
+    }
+    
+    const eventosValidos = eventosForm.filter(ev => ev.tipo)
+    if (eventosValidos.length === 0) {
+      showMensaje('Agrega al menos un evento', 'error')
+      return
+    }
+    
     try {
       const formData = new FormData()
-      formData.append('local', form.localNombre)
-      formData.append('localId', form.localId)
-      formData.append('domicilio', form.domicilio)
-      formData.append('evento', form.evento)
-      formData.append('fecha', form.fecha)
-      formData.append('hora', form.hora)
-      formData.append('comprobante', form.comprobante)
-      formData.append('pagado', form.pagado)
+      formData.append('local', selectedLocal.nombre)
+      formData.append('localId', selectedLocal.id)
+      formData.append('domicilio', selectedLocal.domicilio || '')
+      formData.append('pagado', pagado)
+      formData.append('eventos', JSON.stringify(eventosValidos))
       
-      if (pdfFile) {
-        formData.append('comprobantePDF', pdfFile)
-      }
+      comprobantes.forEach(file => {
+        formData.append('comprobantes', file)
+      })
       
-      if (editingId) {
-        await api.updateEventoWithFile(editingId, formData)
-        showMensaje('Evento actualizado')
-      } else {
-        await api.createEventoWithFile(formData)
-        showMensaje('Evento creado')
-      }
+      await api.createEventoWithFile(formData)
+      showMensaje(`${eventosValidos.length} evento(s) creado(s)`)
       setShowForm(false)
-      setForm(emptyForm)
-      setPdfFile(null)
-      setEditingId(null)
       loadData()
     } catch (error) {
       showMensaje(error.message, 'error')
@@ -216,13 +212,13 @@ export default function Eventos() {
       const inicioSemana = new Date(hoy)
       inicioSemana.setDate(hoy.getDate() - hoy.getDay())
       desde = inicioSemana.toISOString().split('T')[0]
-      hasta = hoy.toISOString().split('T')[0]
+      hasta = new Date(inicioSemana.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     } else if (tipo === 'mes') {
       desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
-      hasta = hoy.toISOString().split('T')[0]
+      hasta = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split('T')[0]
     } else if (tipo === 'año') {
       desde = new Date(hoy.getFullYear(), 0, 1).toISOString().split('T')[0]
-      hasta = hoy.toISOString().split('T')[0]
+      hasta = new Date(hoy.getFullYear(), 11, 31).toISOString().split('T')[0]
     }
     
     setFiltroDesde(desde)
@@ -299,22 +295,23 @@ export default function Eventos() {
         </div>
       </div>
 
-      {/* Modal Form */}
+      {/* Modal Form - Nuevo diseño multi-evento */}
       {showForm && (
         <div className="modal-overlay">
-          <div className="modal">
+          <div className="modal" style={{ maxWidth: '700px' }}>
             <div className="modal-header">
-              <h3>{editingId ? 'Editar Evento' : 'Nuevo Evento'}</h3>
+              <h3>Nuevo Registro de Eventos</h3>
               <button className="btn-close" onClick={() => setShowForm(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label>Local *</label>
+              {/* Selección de Local */}
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <label><strong>Local *</strong></label>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <select
                     className="search-input"
                     style={{ flex: 1 }}
-                    value={form.localId}
+                    value={selectedLocalId}
                     onChange={(e) => handleLocalSelect(e.target.value)}
                     required
                   >
@@ -327,85 +324,131 @@ export default function Eventos() {
                     + Nuevo
                   </button>
                 </div>
-                {form.domicilio && <small style={{ color: 'var(--text-muted)' }}>📍 {form.domicilio}</small>}
+                {selectedLocal && (
+                  <small style={{ color: 'var(--text-muted)' }}>📍 {selectedLocal.domicilio || 'Sin domicilio'}</small>
+                )}
               </div>
 
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Tipo de Evento *</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <select
-                      className="search-input"
-                      style={{ flex: 1 }}
-                      value={form.evento}
-                      onChange={(e) => setForm({ ...form, evento: e.target.value })}
-                      required
-                    >
-                      <option value="">Seleccionar tipo...</option>
-                      {tiposEvento.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+              {/* Eventos */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label><strong>Eventos</strong></label>
+                {eventosForm.map((ev, idx) => (
+                  <div key={idx} style={{ 
+                    border: '1px solid var(--border)', 
+                    borderRadius: 'var(--radius)', 
+                    padding: '1rem', 
+                    marginBottom: '0.5rem',
+                    background: '#fafafa'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: '500' }}>Evento {idx + 1}</span>
+                      {eventosForm.length > 1 && (
+                        <button type="button" onClick={() => removeEvento(idx)} style={{ 
+                          background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' 
+                        }}>🗑️</button>
+                      )}
+                    </div>
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Tipo *</label>
+                        <select
+                          className="search-input"
+                          value={ev.tipo}
+                          onChange={(e) => updateEvento(idx, 'tipo', e.target.value)}
+                          required
+                        >
+                          <option value="">Seleccionar...</option>
+                          {tiposEvento.map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Fecha</label>
+                        <input
+                          type="date"
+                          value={ev.fecha}
+                          onChange={(e) => updateEvento(idx, 'fecha', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Hora Desde</label>
+                        <input
+                          type="time"
+                          value={ev.horaDesde}
+                          onChange={(e) => updateEvento(idx, 'horaDesde', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Hora Hasta</label>
+                        <input
+                          type="time"
+                          value={ev.horaHasta}
+                          onChange={(e) => updateEvento(idx, 'horaHasta', e.target.value)}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <input
-                      type="text"
-                      placeholder="Agregar nuevo tipo..."
-                      value={nuevoTipo}
-                      onChange={(e) => setNuevoTipo(e.target.value)}
-                      style={{ flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
-                    />
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddTipo}>+</button>
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Fecha</label>
-                  <input
-                    type="date"
-                    value={form.fecha}
-                    onChange={(e) => setForm({ ...form, fecha: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Hora</label>
+                ))}
+                <button type="button" className="btn btn-secondary" onClick={addEvento} style={{ width: '100%' }}>
+                  + Agregar otro evento
+                </button>
+                
+                {/* Agregar nuevo tipo */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                   <input
                     type="text"
-                    placeholder="Ej: Hasta 03:30"
-                    value={form.hora}
-                    onChange={(e) => setForm({ ...form, hora: e.target.value })}
+                    placeholder="Agregar nuevo tipo de evento..."
+                    value={nuevoTipo}
+                    onChange={(e) => setNuevoTipo(e.target.value)}
+                    style={{ flex: 1, padding: '0.5rem', fontSize: '0.875rem' }}
                   />
-                </div>
-                <div className="form-group">
-                  <label>Nº Comprobante</label>
-                  <input
-                    type="text"
-                    value={form.comprobante}
-                    onChange={(e) => setForm({ ...form, comprobante: e.target.value })}
-                  />
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddTipo}>+ Tipo</button>
                 </div>
               </div>
-              
-              <div className="form-grid" style={{ marginTop: '1rem' }}>
-                <div className="form-group">
-                  <label>Comprobante (PDF o Imagen)</label>
+
+              {/* Comprobantes */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label><strong>Comprobantes (PDF o Imágenes)</strong></label>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  onChange={handleFileChange}
+                  style={{ marginBottom: '0.5rem' }}
+                />
+                {comprobantes.length > 0 && (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {comprobantes.map((file, idx) => (
+                      <span key={idx} style={{ 
+                        background: '#e5e7eb', 
+                        padding: '0.25rem 0.5rem', 
+                        borderRadius: '4px',
+                        fontSize: '0.875rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem'
+                      }}>
+                        📎 {file.name}
+                        <button type="button" onClick={() => removeComprobante(idx)} style={{ 
+                          background: 'none', border: 'none', cursor: 'pointer', color: '#666' 
+                        }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Estado de pago */}
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                   <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
-                    onChange={(e) => setPdfFile(e.target.files[0])}
+                    type="checkbox"
+                    checked={pagado}
+                    onChange={(e) => setPagado(e.target.checked)}
                   />
-                  {pdfFile && <small>📎 {pdfFile.name}</small>}
-                </div>
-                <div className="form-group">
-                  <label>Estado de pago</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={form.pagado}
-                      onChange={(e) => setForm({ ...form, pagado: e.target.checked })}
-                    />
-                    Pagado
-                  </label>
-                </div>
+                  <strong>Pagado</strong>
+                </label>
               </div>
 
               <div className="modal-footer">
@@ -413,7 +456,7 @@ export default function Eventos() {
                   Cancelar
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {editingId ? 'Guardar' : 'Crear'}
+                  Guardar
                 </button>
               </div>
             </form>
@@ -458,6 +501,7 @@ export default function Eventos() {
         </div>
       )}
 
+      {/* Tabla de eventos */}
       <div className="card">
         {loading ? (
           <div className="loading">Cargando...</div>
@@ -470,7 +514,7 @@ export default function Eventos() {
                 <th>Fecha</th>
                 <th>Local</th>
                 <th>Tipo</th>
-                <th>Hora</th>
+                <th>Horario</th>
                 <th>Pagado</th>
                 <th>Comp.</th>
                 <th>Acciones</th>
@@ -482,35 +526,33 @@ export default function Eventos() {
                   <td>{evento.fecha || '-'}</td>
                   <td><strong>{evento.local}</strong></td>
                   <td><span className="badge badge-warning">{evento.evento}</span></td>
-                  <td>{evento.hora}</td>
+                  <td>{evento.horaDesde && evento.horaHasta ? `${evento.horaDesde} - ${evento.horaHasta}` : (evento.hora || '-')}</td>
                   <td>
                     <span className={`badge ${evento.pagado ? 'badge-success' : 'badge-danger'}`}>
                       {evento.pagado ? 'Sí' : 'No'}
                     </span>
                   </td>
                   <td>
-                    {evento.comprobantePDF ? (
+                    {evento.comprobantes?.length > 0 ? (
+                      evento.comprobantes.map((c, i) => (
+                        <a key={i} href={`/api/eventos/comprobante/${c}`} target="_blank" rel="noopener noreferrer" style={{ marginRight: '0.25rem' }}>
+                          📎
+                        </a>
+                      ))
+                    ) : evento.comprobantePDF ? (
                       <a href={`/api/eventos/comprobante/${evento.comprobantePDF}`} target="_blank" rel="noopener noreferrer">
                         📎
                       </a>
                     ) : '-'}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '0.25rem' }}>
-                      <button 
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => openEditForm(evento)}
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => handleDelete(evento.id, evento.local)}
-                        style={{ color: 'var(--danger)' }}
-                      >
-                        🗑️
-                      </button>
-                    </div>
+                    <button 
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleDelete(evento.id, evento.local)}
+                      style={{ color: 'var(--danger)' }}
+                    >
+                      🗑️
+                    </button>
                   </td>
                 </tr>
               ))}

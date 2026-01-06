@@ -105,10 +105,11 @@ router.get('/eventos/excel', (req, res) => {
       'Fecha': e.fecha || '',
       'Local': e.local || '',
       'Domicilio': e.domicilio || '',
-      'Evento': e.evento || '',
-      'Hora': e.hora || '',
-      'Comprobante': e.comprobante || '',
+      'Tipo Evento': e.evento || '',
+      'Hora Desde': e.horaDesde || '',
+      'Hora Hasta': e.horaHasta || '',
       'Pagado': e.pagado ? 'Sí' : 'No',
+      'Comprobantes': e.comprobantes?.length ? e.comprobantes.join(', ') : (e.comprobantePDF || ''),
       'Período': e.periodo || ''
     }));
     
@@ -118,7 +119,7 @@ router.get('/eventos/excel', (req, res) => {
     // Ajustar anchos de columna
     ws['!cols'] = [
       { wch: 12 }, { wch: 25 }, { wch: 25 }, { wch: 15 },
-      { wch: 12 }, { wch: 15 }, { wch: 8 }, { wch: 15 }
+      { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 30 }, { wch: 15 }
     ];
     
     XLSX.utils.book_append_sheet(wb, ws, 'Eventos');
