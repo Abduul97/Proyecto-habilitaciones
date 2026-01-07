@@ -91,8 +91,8 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// Crear eventos (soporta múltiples eventos + múltiples comprobantes)
-router.post('/', upload.array('comprobantes', 10), (req, res) => {
+// Crear eventos (soporta múltiples eventos + múltiples comprobantes en Base64)
+router.post('/', upload.array('comprobantes', 10), async (req, res) => {
   try {
     const { local, localId, domicilio, pagado, eventos: eventosJson } = req.body;
     
@@ -110,8 +110,20 @@ router.post('/', upload.array('comprobantes', 10), (req, res) => {
       }
     }
     
-    // Obtener nombres de archivos subidos
-    const comprobantes = req.files ? req.files.map(f => f.filename) : [];
+    // Convertir archivos a Base64
+    const comprobantesBase64 = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const base64 = fs.readFileSync(file.path).toString('base64');
+        comprobantesBase64.push({
+          nombre: file.originalname,
+          tipo: file.mimetype,
+          data: base64
+        });
+        // Eliminar archivo temporal
+        fs.unlinkSync(file.path);
+      }
+    }
     
     const nuevosEventos = createEvento({
       local,
@@ -119,13 +131,37 @@ router.post('/', upload.array('comprobantes', 10), (req, res) => {
       domicilio,
       pagado: pagado === 'true' || pagado === true,
       eventos: eventosData,
-      comprobantes
+      comprobantesBase64
     });
     
     res.status(201).json({ data: nuevosEventos, mensaje: `${nuevosEventos.length} evento(s) creado(s)` });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al crear evento' });
+  }
+});
+
+// Obtener comprobante Base64
+router.get('/comprobante-ver/:eventoId/:index', (req, res) => {
+  try {
+    const evento = getEventoById(req.params.eventoId);
+    if (!evento) {
+      return res.status(404).json({ error: 'Evento no encontrado' });
+    }
+    
+    const index = parseInt(req.params.index);
+    const comp = evento.comprobantesBase64?.[index];
+    
+    if (!comp) {
+      return res.status(404).json({ error: 'Comprobante no encontrado' });
+    }
+    
+    const buffer = Buffer.from(comp.data, 'base64');
+    res.setHeader('Content-Type', comp.tipo);
+    res.setHeader('Content-Disposition', `inline; filename="${comp.nombre}"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener comprobante' });
   }
 });
 

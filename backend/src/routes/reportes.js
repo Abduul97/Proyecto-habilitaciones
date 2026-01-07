@@ -109,7 +109,7 @@ router.get('/eventos/excel', (req, res) => {
       'Hora Desde': e.horaDesde || '',
       'Hora Hasta': e.horaHasta || '',
       'Pagado': e.pagado ? 'Sí' : 'No',
-      'Comprobantes': e.comprobantes?.length ? e.comprobantes.join(', ') : (e.comprobantePDF || ''),
+      'Comprobantes': e.comprobantesBase64?.length ? e.comprobantesBase64.map(c => c.nombre).join(', ') : (e.comprobantes?.join(', ') || ''),
       'Período': e.periodo || ''
     }));
     

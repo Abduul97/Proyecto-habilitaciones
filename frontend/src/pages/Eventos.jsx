@@ -533,16 +533,18 @@ export default function Eventos() {
                     </span>
                   </td>
                   <td>
-                    {evento.comprobantes?.length > 0 ? (
+                    {evento.comprobantesBase64?.length > 0 ? (
+                      evento.comprobantesBase64.map((c, i) => (
+                        <a key={i} href={`/api/eventos/comprobante-ver/${evento.id}/${i}`} target="_blank" rel="noopener noreferrer" style={{ marginRight: '0.25rem' }}>
+                          📎 {c.nombre?.substring(0, 10)}
+                        </a>
+                      ))
+                    ) : evento.comprobantes?.length > 0 ? (
                       evento.comprobantes.map((c, i) => (
                         <a key={i} href={`/api/eventos/comprobante/${c}`} target="_blank" rel="noopener noreferrer" style={{ marginRight: '0.25rem' }}>
                           📎
                         </a>
                       ))
-                    ) : evento.comprobantePDF ? (
-                      <a href={`/api/eventos/comprobante/${evento.comprobantePDF}`} target="_blank" rel="noopener noreferrer">
-                        📎
-                      </a>
                     ) : '-'}
                   </td>
                   <td>

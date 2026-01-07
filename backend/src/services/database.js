@@ -126,7 +126,7 @@ export function createEvento(data) {
         horaDesde: ev.horaDesde || '',
         horaHasta: ev.horaHasta || '',
         hora: ev.horaDesde && ev.horaHasta ? `${ev.horaDesde} a ${ev.horaHasta}` : ev.horaDesde || '',
-        comprobantes: data.comprobantes || [],
+        comprobantesBase64: data.comprobantesBase64 || [],
         pagado: data.pagado || false,
         periodo: 'manual',
         createdAt: new Date().toISOString()
@@ -145,8 +145,7 @@ export function createEvento(data) {
       horaDesde: data.horaDesde || '',
       horaHasta: data.horaHasta || '',
       hora: data.hora || '',
-      comprobantePDF: data.comprobantePDF || null,
-      comprobantes: data.comprobantes || [],
+      comprobantesBase64: data.comprobantesBase64 || [],
       pagado: data.pagado || false,
       periodo: 'manual',
       createdAt: new Date().toISOString()
